@@ -1,0 +1,6 @@
+backend/results/
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
