@@ -22,6 +22,9 @@ export default function Detection() {
   const [streamDetections, setStreamDetections] = useState([]);
   const [streamProcessed, setStreamProcessed] = useState(0);
   const [streaming, setStreaming] = useState(false);
+  const skipOptions = [2, 5, 10];
+  const [skipIndex, setSkipIndex] = useState(0);
+  const skipFrames = skipOptions[skipIndex];
 
   const abortRef = useRef(null);
   const streamAbortRef = useRef(null);
@@ -80,7 +83,7 @@ export default function Detection() {
       setStreamDetections([]);
       setStreamProcessed(0);
 
-      const abort = detectVideoStream(file, confidence, {
+      const abort = detectVideoStream(file, confidence, skipFrames, {
         onFrame: (data) => {
           setStreamFrame(data.frame);
           setStreamProgress(data.progress || 0);
@@ -126,7 +129,7 @@ export default function Detection() {
       setLoading(false);
       abortRef.current = null;
     }
-  }, [file, fileType, confidence, cancelAll]);
+  }, [file, fileType, confidence, skipFrames, cancelAll]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -176,6 +179,28 @@ export default function Detection() {
                 className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-accent"
               />
             </div>
+
+            {fileType === "video" && (
+              <div className="min-w-[200px]">
+                <label className="mb-1.5 block text-xs font-medium text-secondary">
+                  Skip Frames: every {skipFrames} frames
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="1"
+                  value={skipIndex}
+                  onChange={(e) => setSkipIndex(parseInt(e.target.value, 10))}
+                  className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-accent"
+                />
+                <div className="mt-1 flex justify-between text-[11px] text-secondary">
+                  <span>2</span>
+                  <span>5</span>
+                  <span>10</span>
+                </div>
+              </div>
+            )}
 
             {loading ? (
               <button
