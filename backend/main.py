@@ -29,7 +29,7 @@ import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms as transforms
 from PIL import Image
-from fastapi import FastAPI, File, Form, UploadFile, Request
+from fastapi import FastAPI, File, Form, UploadFile, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, FileResponse
@@ -248,8 +248,11 @@ async def upload_video(
 
 
 @app.get("/detect-video-stream/{stream_id}")
-async def detect_video_stream(stream_id: str, request: Request):
+async def detect_video_stream(stream_id: str, request: Request, skip: int = 2):
     """SSE endpoint: streams annotated frames as base64 JPEG, one per event."""
+    if skip not in {2, 5, 10}:
+        raise HTTPException(status_code=400, detail="skip must be one of: 2, 5, 10")
+
     entry = _video_store.pop(stream_id, None)
     if not entry:
         return {"error": "Invalid or expired stream ID"}
@@ -261,7 +264,7 @@ async def detect_video_stream(stream_id: str, request: Request):
         cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
-        frame_skip = max(1, int(fps // 2))  # ~2 detections per second of video
+        frame_skip = max(1, skip)
 
         all_detections = set()
         frame_count = 0

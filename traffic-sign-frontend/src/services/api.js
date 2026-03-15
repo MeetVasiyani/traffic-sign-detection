@@ -36,7 +36,7 @@ export async function detectTrafficSigns(file, confidenceThreshold = 0.25, signa
  *
  * Returns an abort function.
  */
-export function detectVideoStream(file, confidenceThreshold, { onFrame, onDone, onError }) {
+export function detectVideoStream(file, confidenceThreshold, skipFrames, { onFrame, onDone, onError }) {
   let aborted = false;
   let reader = null;
 
@@ -62,7 +62,12 @@ export function detectVideoStream(file, confidenceThreshold, { onFrame, onDone, 
       if (aborted) return;
 
       // Step 2: Open SSE stream via fetch
-      const response = await fetch(`${API_BASE_URL}/detect-video-stream/${stream_id}`);
+      const response = await fetch(
+        `${API_BASE_URL}/detect-video-stream/${stream_id}?skip=${skipFrames}`
+      );
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream failed with status ${response.status}`);
+      }
       reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -74,13 +79,23 @@ export function detectVideoStream(file, confidenceThreshold, { onFrame, onDone, 
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE lines
-        const lines = buffer.split("\n");
-        buffer = lines.pop(); // keep incomplete line in buffer
+        // Parse SSE events (delimited by blank line)
+        while (true) {
+          const idx = buffer.indexOf("\n\n");
+          const crlfIdx = buffer.indexOf("\r\n\r\n");
+          const splitIdx = (crlfIdx !== -1 && (crlfIdx < idx || idx === -1)) ? crlfIdx : idx;
+          if (splitIdx === -1) break;
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6);
+          const rawEvent = buffer.slice(0, splitIdx);
+          buffer = buffer.slice(splitIdx + (buffer[splitIdx] === "\r" ? 4 : 2));
+
+          const lines = rawEvent.split(/\r?\n/);
+          const dataLines = lines
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.replace(/^data:\s?/, ""));
+          if (dataLines.length === 0) continue;
+
+          const jsonStr = dataLines.join("\n");
           try {
             const data = JSON.parse(jsonStr);
             if (data.done) {
@@ -88,7 +103,7 @@ export function detectVideoStream(file, confidenceThreshold, { onFrame, onDone, 
             } else {
               if (!aborted) onFrame(data);
             }
-          } catch (_) { /* skip malformed line */ }
+          } catch (_) { /* skip malformed event */ }
         }
       }
     } catch (err) {
